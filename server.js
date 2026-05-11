@@ -6,11 +6,19 @@ const app = express();
 
 app.use(cors());
 
+// Ключ Кинопоиска 
 const API_KEY = "94632335-dcd2-4f44-98d5-18866651d7d4";
 
+// Основной endpoint поиска фильмов
 app.get("/movies", async (req, res) => {
     try {
         const keyword = req.query.keyword;
+
+        if (!keyword) {
+            return res.status(400).json({
+                error: "keyword is required"
+            });
+        }
 
         const response = await axios.get(
             "https://kinopoiskapiunofficial.tech/api/v2.1/films/search-by-keyword",
@@ -26,16 +34,18 @@ app.get("/movies", async (req, res) => {
         );
 
         res.json(response.data);
+
     } catch (error) {
-        console.log(error.message);
+        console.log("ERROR:", error.message);
 
         res.status(500).json({
-            error: "Server error"
+            error: "Server error",
+            message: error.message
         });
     }
 });
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
     console.log(`Server started on port ${PORT}`);
