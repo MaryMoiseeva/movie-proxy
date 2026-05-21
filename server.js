@@ -33,7 +33,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const API_KEY = process.env.KINOPOISK_API_KEY || "94632335-dcd2-4f44-98d5-18866651d7d4";
+const API_KEY = process.env.KINOPOISK_API_KEY || "";
 const GIGACHAT_AUTH_KEY = process.env.GIGACHAT_AUTH_KEY || "";
 const GIGACHAT_SCOPE = process.env.GIGACHAT_SCOPE || "GIGACHAT_API_PERS";
 const SUPABASE_URL = (process.env.SUPABASE_URL || "https://nfcpoazniizrlhmboqfm.supabase.co").replace(/\/$/, "");
@@ -635,7 +635,7 @@ function logKinopoiskFallback(source, error) {
 }
 
 function canUseKinopoisk() {
-    return Date.now() >= kinopoiskBlockedUntil;
+    return Boolean(API_KEY) && Date.now() >= kinopoiskBlockedUntil;
 }
 
 async function resolveCandidateGroups(candidateGroups) {
@@ -3706,6 +3706,22 @@ async function savePreferencesInSupabase(userId, preferences) {
 
 app.get("/", (req, res) => {
     res.send("Movie Proxy Server is running");
+});
+
+app.get("/health/providers", (req, res) => {
+    res.json({
+        ok: true,
+        providers: {
+            gigachat: Boolean(GIGACHAT_AUTH_KEY && GIGACHAT_SCOPE),
+            kinopoisk: Boolean(API_KEY),
+            supabase: Boolean(SUPABASE_URL && SUPABASE_KEY)
+        },
+        blocked: {
+            kinopoisk: Date.now() < kinopoiskBlockedUntil,
+            supabaseMovieCache: Date.now() < supabaseMovieCacheBlockedUntil,
+            supabaseProfile: Date.now() < supabaseProfileBlockedUntil
+        }
+    });
 });
 
 app.get("/favorites", async (req, res) => {
