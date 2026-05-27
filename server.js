@@ -33,9 +33,20 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const API_KEY = process.env.KINOPOISK_API_KEY || "";
-const GIGACHAT_AUTH_KEY = process.env.GIGACHAT_AUTH_KEY || "";
-const GIGACHAT_SCOPE = process.env.GIGACHAT_SCOPE || "GIGACHAT_API_PERS";
+function cleanEnvValue(value) {
+    return String(value || "")
+        .trim()
+        .replace(/^["']|["']$/g, "")
+        .trim();
+}
+
+function cleanGigaChatAuthKey(value) {
+    return cleanEnvValue(value).replace(/^Basic\s+/i, "").trim();
+}
+
+const API_KEY = cleanEnvValue(process.env.KINOPOISK_API_KEY);
+const GIGACHAT_AUTH_KEY = cleanGigaChatAuthKey(process.env.GIGACHAT_AUTH_KEY);
+const GIGACHAT_SCOPE = cleanEnvValue(process.env.GIGACHAT_SCOPE) || "GIGACHAT_API_PERS";
 const SUPABASE_URL = (process.env.SUPABASE_URL || "https://nfcpoazniizrlhmboqfm.supabase.co").replace(/\/$/, "");
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
@@ -1308,7 +1319,8 @@ function matchesTopicKeywords(film, plan) {
         film.nameRu,
         film.nameEn,
         film.description,
-        ...(film.genres || []).map((item) => item.genre)
+        ...(film.genres || []).map((item) => item.genre),
+        ...(film.countries || []).map((item) => item.country)
     ].join(" ").toLowerCase();
 
     return keywords.some((keyword) => {
@@ -1748,6 +1760,21 @@ function extractCountryConstraints(mood) {
         searchQueries.push("советский фильм");
     }
 
+    if (/(?:итальянск|италия|из италии|снято в италии)/.test(text)) {
+        countries.push("италия");
+        searchQueries.push("итальянское кино", "итальянский фильм");
+    }
+
+    if (/(?:американск|сша|из сша|из америки|голливудск)/.test(text)) {
+        countries.push("сша");
+        searchQueries.push("американский фильм", "американское кино");
+    }
+
+    if (/(?:французск|франция|из франции|снято во франции)/.test(text)) {
+        countries.push("франция");
+        searchQueries.push("французский фильм", "французское кино");
+    }
+
     return {
         hardCountries: [...new Set(countries)],
         searchQueries
@@ -1991,6 +2018,33 @@ function inferTopicGenreIds(topic, fullText) {
 function applyTopicSignals(result, mood) {
     const text = normalizeText(mood);
     const topicRules = [
+        {
+            keywords: ["новая волна", "новой волны", "неореализм", "артхаус", "авторское кино"],
+            genreIds: [2, 4, 15],
+            avoidGenreIds: [18, 19, 24, 33],
+            avoidKeywords: ["мультфильм", "детский", "семейный", "супергерой"],
+            queries: [
+                "итальянский неореализм",
+                "итальянская новая волна",
+                "итальянское авторское кино",
+                "фильмы Феллини Антониони Пазолини"
+            ],
+            requiredKeywords: []
+        },
+        {
+            keywords: ["толст", "полн", "лишний вес", "похуд"],
+            genreIds: [13, 4, 2],
+            avoidGenreIds: [18, 19, 24, 33],
+            avoidKeywords: ["детский", "мультфильм", "аниме"],
+            queries: [
+                "американская комедия толстяк",
+                "американская комедия толстушка",
+                "комедия про полного героя",
+                "комедия про лишний вес",
+                "fat comedy movie"
+            ],
+            requiredKeywords: []
+        },
         {
             keywords: ["\u0432\u0430\u043c\u043f\u0438\u0440", "\u0434\u0440\u0430\u043a\u0443\u043b"],
             genreIds: [17, 12, 4, 1],
@@ -3204,7 +3258,8 @@ function fallbackRank(films, plan) {
                 film.nameRu,
                 film.nameEn,
                 film.description,
-                ...(film.genres || []).map((item) => item.genre)
+                ...(film.genres || []).map((item) => item.genre),
+                ...(film.countries || []).map((item) => item.country)
             ].join(" ").toLowerCase();
             const filmGenreIds = genreIdsForFilm(film);
             const requiredOverlap = requiredGenreIds.filter((id) => filmGenreIds.includes(id)).length;
@@ -3233,6 +3288,8 @@ function fallbackRank(films, plan) {
                 : 0;
             const avoidPenalty = !isReferenceMode && hasAvoidedKeyword(film, plan.avoidKeywords) ? 8 : 0;
             const excludedPenalty = !isReferenceMode && hasExcludedGenre(film, plan.excludeGenreIds) ? 12 : 0;
+            const preferenceAvoidPenalty = !isReferenceMode && hasAvoidedKeyword(film, activePreferenceAvoidKeywords(plan)) ? 5 : 0;
+            const preferenceGenrePenalty = !isReferenceMode && hasExcludedGenre(film, activePreferenceExcludeGenreIds(plan)) ? 6 : 0;
             const year = Number.parseInt(String(film.year || ""), 10);
             const yearScore = plan.preferredYear && Number.isFinite(year)
                 ? Math.max(0, 4 - Math.abs(year - plan.preferredYear))
@@ -3267,7 +3324,7 @@ function fallbackRank(films, plan) {
 
             return {
                 film,
-                score: genreScore + referenceGenreScore + requiredGenreScore + topicScore + exactTopicScore + mediumScore + spaceScore + explicitSpaceScore + collectiveScore + favoriteGenreScore + ratingWeight + yearScore + ratingScore - avoidPenalty - excludedPenalty - lightMismatchPenalty - animationPenalty
+                score: genreScore + referenceGenreScore + requiredGenreScore + topicScore + exactTopicScore + mediumScore + spaceScore + explicitSpaceScore + collectiveScore + favoriteGenreScore + ratingWeight + yearScore + ratingScore - avoidPenalty - excludedPenalty - preferenceAvoidPenalty - preferenceGenrePenalty - lightMismatchPenalty - animationPenalty
             };
         })
         .sort((a, b) => b.score - a.score)
@@ -3443,6 +3500,7 @@ async function rankFilmsWithGigaChat(mood, plan, candidates) {
             "If the user asks for something similar to a movie, choose films similar by atmosphere, genre, audience preferences and motifs, not films with the same title/franchise only. " +
             "If several participants are present, choose movies that are acceptable for all participants, balancing their moods and desired effects. " +
             "If search profile has requiredGenreIds, every chosen movie must match at least one required genre; for horror/fantasy compromise prefer dark fantasy, gothic horror, supernatural thrillers and avoid children's, family and generic comedy movies. " +
+            "preferenceAvoidKeywords and preferenceExcludeGenreIds are weak saved-profile penalties only: apply them when two candidates fit equally well, but never let them override the current request. " +
             "If they want to distract themselves, cheer up, relax or watch something funny, avoid heavy, tragic, depressing or war-like films even if they contain comedy as one genre. " +
             "Old movies, low-rated movies and movies without rating are allowed if they fit the request. " +
             "Return only JSON: {\"ids\":[1,2,3]} with up to 25 ids. " +
@@ -3672,6 +3730,189 @@ function favoriteGenreHints(favorites) {
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
         .map(([name]) => name);
+}
+
+const NEGATIVE_PREFERENCE_RE = /(?:не\s+(?:люблю|нрав|хочу|надо|интерес|заход)|без|кроме|исключ|избег|меньше|не показывай|терпеть не могу|ненавиж)/i;
+
+const PREFERENCE_PENALTY_RULES = [
+    {
+        genreIds: [18, 24, 33],
+        keywords: ["мульт", "мультик", "мультфильм", "аниме", "детск"],
+        avoidKeywords: ["мульт", "мультик", "мультфильм", "аниме", "детск"]
+    },
+    {
+        genreIds: [17],
+        keywords: ["ужас", "хоррор", "страшн", "слэшер", "слешер"],
+        avoidKeywords: ["ужас", "хоррор", "страшн", "слэшер", "слешер"]
+    },
+    {
+        genreIds: [14],
+        keywords: ["войн", "военн"],
+        avoidKeywords: ["войн", "военн"]
+    },
+    {
+        genreIds: [11],
+        keywords: ["боевик", "экшен"],
+        avoidKeywords: ["боевик", "экшен"]
+    },
+    {
+        genreIds: [6],
+        keywords: ["фантаст", "сай-фай", "sci-fi", "киберпанк"],
+        avoidKeywords: ["фантаст", "сай-фай", "sci-fi", "киберпанк"]
+    },
+    {
+        genreIds: [12],
+        keywords: ["фэнтези", "фентези", "маг", "волшеб", "сказ"],
+        avoidKeywords: ["фэнтези", "фентези", "маг", "волшеб", "сказ"]
+    },
+    {
+        genreIds: [13],
+        keywords: ["комед", "смешн", "весел"],
+        avoidKeywords: ["комед", "смешн", "весел"]
+    },
+    {
+        genreIds: [2],
+        keywords: ["драм", "тяжел", "депресс", "трагед"],
+        avoidKeywords: ["драм", "тяжел", "депресс", "трагед"]
+    },
+    {
+        genreIds: [4],
+        keywords: ["мелодрам", "романт", "любов"],
+        avoidKeywords: ["мелодрам", "романт", "любов"]
+    },
+    {
+        genreIds: [1],
+        keywords: ["триллер", "напряж"],
+        avoidKeywords: ["триллер", "напряж"]
+    },
+    {
+        genreIds: [3],
+        keywords: ["криминал", "мафия", "бандит"],
+        avoidKeywords: ["криминал", "мафия", "бандит"]
+    },
+    {
+        genreIds: [5],
+        keywords: ["детектив", "расслед"],
+        avoidKeywords: ["детектив", "расслед"]
+    },
+    {
+        genreIds: [19],
+        keywords: ["семейн"],
+        avoidKeywords: ["семейн"]
+    },
+    {
+        genreIds: [21],
+        keywords: ["спорт", "футбол", "хоккей", "баскет", "бокс", "гонк", "фигурн"],
+        avoidKeywords: ["спорт", "футбол", "хоккей", "баскет", "бокс", "гонк", "фигурн"]
+    },
+    {
+        genreIds: [22],
+        keywords: ["документал", "докфильм"],
+        avoidKeywords: ["документал", "докфильм"]
+    },
+    {
+        genreIds: [16, 20],
+        keywords: ["музык", "мюзикл"],
+        avoidKeywords: ["музык", "мюзикл"]
+    },
+    {
+        genreIds: [28],
+        keywords: ["18+", "эротик", "для взрослых"],
+        avoidKeywords: ["18+", "эротик", "для взрослых"]
+    }
+];
+
+const PREFERENCE_TOPIC_AVOID_KEYWORDS = [
+    "космос",
+    "космичес",
+    "планет",
+    "галакт",
+    "астронавт",
+    "пришел",
+    "зомби",
+    "вампир",
+    "кров",
+    "жесток",
+    "насили",
+    "маньяк",
+    "катастроф",
+    "советск",
+    "российск",
+    "американск",
+    "старое кино",
+    "черно-бел",
+    "чёрно-бел"
+];
+
+function extractPreferencePenaltySignals(preferences) {
+    const excludeGenreIds = [];
+    const avoidKeywords = [];
+
+    for (const line of preferenceLines(preferences?.text)) {
+        const normalizedLine = normalizeText(line);
+
+        if (!NEGATIVE_PREFERENCE_RE.test(normalizedLine)) {
+            continue;
+        }
+
+        for (const rule of PREFERENCE_PENALTY_RULES) {
+            if (rule.keywords.some((keyword) => normalizedLine.includes(normalizeText(keyword)))) {
+                excludeGenreIds.push(...rule.genreIds);
+                avoidKeywords.push(...rule.avoidKeywords);
+            }
+        }
+
+        for (const keyword of PREFERENCE_TOPIC_AVOID_KEYWORDS) {
+            if (normalizedLine.includes(normalizeText(keyword))) {
+                avoidKeywords.push(keyword);
+            }
+        }
+    }
+
+    return {
+        excludeGenreIds: [...new Set(excludeGenreIds)].slice(0, 12),
+        avoidKeywords: [...new Set(avoidKeywords.map(normalizeText).filter(Boolean))].slice(0, 24)
+    };
+}
+
+function applyPreferencePenaltySignals(plan, preferences) {
+    const signals = extractPreferencePenaltySignals(preferences);
+
+    plan.preferenceExcludeGenreIds = [
+        ...new Set([...(plan.preferenceExcludeGenreIds || []), ...signals.excludeGenreIds])
+    ];
+    plan.preferenceAvoidKeywords = [
+        ...new Set([...(plan.preferenceAvoidKeywords || []), ...signals.avoidKeywords])
+    ];
+
+    return plan;
+}
+
+function activePreferenceExcludeGenreIds(plan) {
+    const explicitGenreIds = new Set(plan.explicitGenreIds || []);
+
+    return (plan.preferenceExcludeGenreIds || [])
+        .filter((id) => !explicitGenreIds.has(id));
+}
+
+function activePreferenceAvoidKeywords(plan) {
+    const queryText = normalizeText(plan.originalQuery || "");
+    const explicitGenreIds = new Set(plan.explicitGenreIds || []);
+
+    return (plan.preferenceAvoidKeywords || []).filter((keyword) => {
+        const normalized = normalizeText(keyword);
+
+        if (!normalized || queryText.includes(normalized)) {
+            return false;
+        }
+
+        const matchingRule = PREFERENCE_PENALTY_RULES.find((rule) => {
+            return rule.avoidKeywords.some((item) => normalized.includes(normalizeText(item)))
+                || rule.keywords.some((item) => normalized.includes(normalizeText(item)));
+        });
+
+        return !matchingRule || !matchingRule.genreIds.some((id) => explicitGenreIds.has(id));
+    });
 }
 
 function buildPreferenceContext(preferences, favorites) {
@@ -4114,7 +4355,21 @@ app.post("/recommendations", async (req, res) => {
         }
 
         const requestedReferenceMovieId = req.body?.referenceMovieId ? Number(req.body.referenceMovieId) : null;
-        const cacheKey = CACHE_VERSION + ":" + (userId || "guest") + ":" + normalizeText(mood) + ":" + (requestedReferenceMovieId || "");
+        const [userPreferences, favoriteFilms] = userId
+            ? await Promise.all([
+                fetchPreferencesFromSupabase(userId),
+                fetchFavoritesFromSupabase(userId)
+            ])
+            : [normalizePreferences({}), []];
+        const preferenceCacheHash = crypto
+            .createHash("md5")
+            .update([
+                userPreferences?.text || "",
+                favoriteGenreHints(favoriteFilms).join("|")
+            ].join("::"))
+            .digest("hex")
+            .slice(0, 8);
+        const cacheKey = CACHE_VERSION + ":" + (userId || "guest") + ":" + preferenceCacheHash + ":" + normalizeText(mood) + ":" + (requestedReferenceMovieId || "");
 
         if (cache.has(cacheKey)) {
             const cachedResult = cache.get(cacheKey);
@@ -4138,12 +4393,6 @@ app.post("/recommendations", async (req, res) => {
             cache.delete(cacheKey);
         }
 
-        const [userPreferences, favoriteFilms] = userId
-            ? await Promise.all([
-                fetchPreferencesFromSupabase(userId),
-                fetchFavoritesFromSupabase(userId)
-            ])
-            : [normalizePreferences({}), []];
         const preferenceContext = buildPreferenceContext(userPreferences, favoriteFilms);
         const actorCandidateName = requestedReferenceMovieId ? "" : extractActorNameQuery(mood);
         const actorContext = requestedReferenceMovieId ? null : await buildActorContext(mood);
@@ -4183,6 +4432,7 @@ app.post("/recommendations", async (req, res) => {
         const plan = actorContext
             ? applyExplicitUserConstraints(DEFAULT_PLAN, mood)
             : await buildRecommendationPlan(mood, preferenceContext);
+        applyPreferencePenaltySignals(plan, userPreferences);
         if (actorContext) {
             plan.actor = {
                 id: actorContext.personId,
