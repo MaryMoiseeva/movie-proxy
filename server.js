@@ -41,6 +41,7 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
 let gigachatToken = null;
 let gigachatTokenExpiresAt = 0;
+let gigachatBlockedUntil = 0;
 let kinopoiskBlockedUntil = 0;
 let supabaseMovieCacheBlockedUntil = 0;
 let supabaseProfileBlockedUntil = 0;
@@ -57,9 +58,9 @@ const CACHE_VERSION = "recommendations-v25";
 const MAX_RETURNED_FILMS = 25;
 const FALLBACK_POSTER_URL = "https://kinopoiskapiunofficial.tech/images/posters/kp/no-poster.png";
 const GIGACHAT_TIMEOUT_MS = 8000;
-const KINOPOISK_TIMEOUT_MS = 4500;
-const KINOPOISK_MIN_START_INTERVAL_MS = 125;
-const KINOPOISK_MAX_CONCURRENT = 3;
+const KINOPOISK_TIMEOUT_MS = 9000;
+const KINOPOISK_MIN_START_INTERVAL_MS = 250;
+const KINOPOISK_MAX_CONCURRENT = 2;
 const KINOPOISK_MEMORY_TTL_MS = 5 * 60 * 1000;
 const SUPABASE_TIMEOUT_MS = 5000;
 const APK_CANDIDATE_PATHS = [
@@ -116,7 +117,7 @@ const GENRE_IDS_BY_NAME = Object.fromEntries(
 );
 
 const DEFAULT_PLAN = {
-    genreIds: [13, 7, 19, 18, 12],
+    genreIds: [13, 7, 19, 12],
     excludeGenreIds: [],
     avoidKeywords: [],
     referenceMovie: null,
@@ -253,7 +254,8 @@ const LOCAL_FALLBACK_FILMS = [
     localFilm(53, "\u0413\u043e\u043b! 2005", 2005, ["\u0434\u0440\u0430\u043c\u0430", "\u0441\u043f\u043e\u0440\u0442"], "7.3", "\u0424\u0443\u0442\u0431\u043e\u043b, \u043c\u0435\u0447\u0442\u0430, \u043a\u0430\u0440\u044c\u0435\u0440\u0430 \u0438 \u043f\u0443\u0442\u044c \u0438\u0433\u0440\u043e\u043a\u0430 \u0432 \u0431\u043e\u043b\u044c\u0448\u043e\u0439 \u0441\u043f\u043e\u0440\u0442."),
     localFilm(54, "\u0427\u0435\u043b\u043e\u0432\u0435\u043a, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 \u0438\u0437\u043c\u0435\u043d\u0438\u043b \u0432\u0441\u0451", 2011, ["\u0434\u0440\u0430\u043c\u0430", "\u0431\u0438\u043e\u0433\u0440\u0430\u0444\u0438\u044f", "\u0441\u043f\u043e\u0440\u0442"], "7.7", "\u0411\u0435\u0439\u0441\u0431\u043e\u043b, \u0430\u043d\u0430\u043b\u0438\u0442\u0438\u043a\u0430, \u043a\u043e\u043c\u0430\u043d\u0434\u0430 \u0438 \u0443\u043c\u043d\u0430\u044f \u0441\u043f\u043e\u0440\u0442\u0438\u0432\u043d\u0430\u044f \u0434\u0440\u0430\u043c\u0430."),
     localFilm(55, "\u041b\u0435\u0434\u0438\u043a\u0430\u0442", 2017, ["\u0434\u0440\u0430\u043c\u0430", "\u0431\u0438\u043e\u0433\u0440\u0430\u0444\u0438\u044f", "\u0441\u043f\u043e\u0440\u0442"], "7.4", "\u0424\u0438\u0433\u0443\u0440\u043d\u043e\u0435 \u043a\u0430\u0442\u0430\u043d\u0438\u0435, \u0442\u0440\u0430\u0432\u043c\u0430, \u0441\u043e\u043f\u0435\u0440\u043d\u0438\u0447\u0435\u0441\u0442\u0432\u043e \u0438 \u0446\u0435\u043d\u0430 \u0441\u043b\u0430\u0432\u044b."),
-    localFilm(56, "\u0420\u0435\u0430\u043b\u044c\u043d\u0430\u044f \u0441\u0442\u0430\u043b\u044c", 2011, ["\u0444\u0430\u043d\u0442\u0430\u0441\u0442\u0438\u043a\u0430", "\u0431\u043e\u0435\u0432\u0438\u043a", "\u0441\u043f\u043e\u0440\u0442"], "7.6", "\u0411\u043e\u043a\u0441, \u0440\u043e\u0431\u043e\u0442\u044b, \u043e\u0442\u0435\u0446 \u0438 \u0441\u044b\u043d, \u0441\u043f\u043e\u0440\u0442\u0438\u0432\u043d\u0430\u044f \u044d\u043d\u0435\u0440\u0433\u0438\u044f \u0438 \u0437\u0440\u0435\u043b\u0438\u0449\u0435.")
+    localFilm(56, "\u0420\u0435\u0430\u043b\u044c\u043d\u0430\u044f \u0441\u0442\u0430\u043b\u044c", 2011, ["\u0444\u0430\u043d\u0442\u0430\u0441\u0442\u0438\u043a\u0430", "\u0431\u043e\u0435\u0432\u0438\u043a", "\u0441\u043f\u043e\u0440\u0442"], "7.6", "\u0411\u043e\u043a\u0441, \u0440\u043e\u0431\u043e\u0442\u044b, \u043e\u0442\u0435\u0446 \u0438 \u0441\u044b\u043d, \u0441\u043f\u043e\u0440\u0442\u0438\u0432\u043d\u0430\u044f \u044d\u043d\u0435\u0440\u0433\u0438\u044f \u0438 \u0437\u0440\u0435\u043b\u0438\u0449\u0435."),
+    localFilm(57, "\u0413\u0440\u043e\u0437\u043e\u0432\u043e\u0439 \u043f\u0435\u0440\u0435\u0432\u0430\u043b", 2026, ["\u0434\u0440\u0430\u043c\u0430", "\u043c\u0435\u043b\u043e\u0434\u0440\u0430\u043c\u0430"], null, "\u041d\u043e\u0432\u0430\u044f \u044d\u043a\u0440\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u044f \u0433\u043e\u0442\u0438\u0447\u0435\u0441\u043a\u043e\u0439 \u0440\u043e\u043c\u0430\u043d\u0442\u0438\u043a\u0438.")
 ];
 
 const ACTOR_FALLBACK_FILMOGRAPHIES = [
@@ -609,6 +611,25 @@ function uniqueFilms(films) {
     return Array.from(byId.values());
 }
 
+function uniqueReferenceOptions(films) {
+    const seen = new Set();
+
+    return (films || []).filter((film) => {
+        const titleKey = normalizeText(film.nameRu || film.nameEn || "");
+        const yearKey = String(film.year || "");
+        const key = titleKey && yearKey
+            ? `${titleKey}:${yearKey}`
+            : String(film.filmId || "");
+
+        if (!key.trim() || seen.has(key)) {
+            return false;
+        }
+
+        seen.add(key);
+        return true;
+    });
+}
+
 function markKinopoiskBlocked(error, source = "") {
     const status = error.response?.status;
     const isPersonLookup = String(source).startsWith("PERSON ");
@@ -623,8 +644,6 @@ function markKinopoiskBlocked(error, source = "") {
         kinopoiskBlockedUntil = Math.max(kinopoiskBlockedUntil, Date.now() + 10 * 60 * 1000);
     } else if (status === 429) {
         kinopoiskBlockedUntil = Math.max(kinopoiskBlockedUntil, Date.now() + 20 * 1000);
-    } else if (isTransientNetworkError(error)) {
-        kinopoiskBlockedUntil = Math.max(kinopoiskBlockedUntil, Date.now() + 15 * 1000);
     }
 }
 
@@ -668,6 +687,74 @@ function supabaseHeaders(extra = {}) {
     return headers;
 }
 
+function supabaseAuthHeaders(extra = {}, forceAuthorization = false) {
+    const headers = supabaseHeaders(extra);
+
+    if (forceAuthorization && !headers.Authorization) {
+        headers.Authorization = `Bearer ${SUPABASE_KEY}`;
+    }
+
+    return headers;
+}
+
+async function supabaseAuthRequest(config) {
+    const requestConfig = {
+        ...config,
+        timeout: SUPABASE_TIMEOUT_MS,
+        headers: supabaseAuthHeaders(config.headers || {})
+    };
+
+    try {
+        return await axios(requestConfig);
+    } catch (error) {
+        if (error.response?.status === 401 && !requestConfig.headers.Authorization) {
+            return axios({
+                ...requestConfig,
+                headers: supabaseAuthHeaders(config.headers || {}, true)
+            });
+        }
+
+        throw error;
+    }
+}
+
+function normalizeEmail(email) {
+    return String(email || "").trim().toLowerCase();
+}
+
+function publicAuthErrorMessage(error) {
+    const status = error.response?.status;
+    const raw = error.response?.data?.msg
+        || error.response?.data?.message
+        || error.response?.data?.error_description
+        || error.response?.data?.error
+        || error.message
+        || "";
+    const message = String(raw).toLowerCase();
+
+    if (message.includes("already") || message.includes("registered") || status === 422) {
+        return "Пользователь с такой почтой уже зарегистрирован";
+    }
+
+    if (message.includes("invalid login") || message.includes("invalid credentials") || status === 400) {
+        return "Неверная почта или пароль";
+    }
+
+    if (message.includes("email not confirmed")) {
+        return "Почта не подтверждена";
+    }
+
+    if (status === 429 || message.includes("rate")) {
+        return "Сервис временно ограничил запросы. Попробуйте позже";
+    }
+
+    if (isTransientNetworkError(error)) {
+        return "Сервер не смог подключиться к Supabase. Проверьте интернет или настройки SUPABASE_SERVICE_ROLE_KEY";
+    }
+
+    return raw ? `Ошибка авторизации: ${raw}` : "Не удалось выполнить авторизацию";
+}
+
 function isTransientNetworkError(error) {
     const code = String(error.code || "").toUpperCase();
     const message = String(error.message || "").toLowerCase();
@@ -677,6 +764,26 @@ function isTransientNetworkError(error) {
         || message.includes("network")
         || message.includes("resolve")
         || message.includes("getaddrinfo");
+}
+
+function canUseGigaChat() {
+    return Boolean(GIGACHAT_AUTH_KEY) && Date.now() >= gigachatBlockedUntil;
+}
+
+function markGigaChatFallback(error) {
+    const status = error.response?.status;
+    const message = String(error.message || "").toLowerCase();
+
+    if (status === 401 || status === 403) {
+        gigachatToken = null;
+        gigachatTokenExpiresAt = 0;
+        gigachatBlockedUntil = Math.max(gigachatBlockedUntil, Date.now() + 10 * 60 * 1000);
+        return;
+    }
+
+    if (isTransientNetworkError(error) || message.includes("eai_again")) {
+        gigachatBlockedUntil = Math.max(gigachatBlockedUntil, Date.now() + 25 * 1000);
+    }
 }
 
 function wait(milliseconds) {
@@ -776,7 +883,7 @@ async function performKinopoiskGet(url, params = {}, attempt = 0) {
                     timeout: KINOPOISK_TIMEOUT_MS
                 });
             } catch (error) {
-                if (isTransientNetworkError(error) || error.response?.status === 429) {
+                if (error.response?.status === 429) {
                     markKinopoiskBlocked(error, "REQUEST GATE");
                 }
 
@@ -1581,6 +1688,10 @@ function filterHardConstraints(films, plan) {
             return false;
         }
 
+        if (!isReferenceMode && plan.blockAnimation && hasAnyGenreId(film, [18, 24, 33])) {
+            return false;
+        }
+
         if (!isReferenceMode && hasAvoidedKeyword(film, plan.avoidKeywords)) {
             return false;
         }
@@ -2074,6 +2185,7 @@ function applyExplicitUserConstraints(plan, mood) {
     const asksSciFi = text.includes("\u0444\u0430\u043d\u0442\u0430\u0441\u0442");
     const asksFantasy = text.includes("\u0444\u044d\u043d\u0442\u0435\u0437\u0438") || text.includes("\u0444\u0435\u043d\u0442\u0435\u0437\u0438");
     const asksAnimation = text.includes("\u043c\u0443\u043b\u044c\u0442") || text.includes("\u0430\u043d\u0438\u043c\u0435");
+    const forbidsAnimation = /(?:\u043d\u0435|без|никаких|вообще не)\s*(?:мульт|мультик|мультфильм|аниме)/i.test(text);
     const asksProjectAveMaria = text.includes("\u0430\u0432\u0435 \u043c\u0430\u0440\u0438") || text.includes("hail mary");
     const asksProjectEndOfWorld = text.includes("\u043f\u0440\u043e\u0435\u043a\u0442") && text.includes("\u043a\u043e\u043d\u0435\u0446 \u0441\u0432\u0435\u0442");
     const asksApocalypse = text.includes("\u043a\u043e\u043d\u0435\u0446 \u0441\u0432\u0435\u0442") || text.includes("\u0430\u043f\u043e\u043a\u0430\u043b\u0438\u043f") || text.includes("\u043a\u0430\u0442\u0430\u0441\u0442\u0440\u043e\u0444");
@@ -2083,6 +2195,20 @@ function applyExplicitUserConstraints(plan, mood) {
     const asksHorror = requestedGenreIds.includes(17);
 
     applyTopicSignals(result, mood);
+
+    if (forbidsAnimation) {
+        result.blockAnimation = true;
+        result.excludeGenreIds.push(18, 24, 33);
+        result.avoidKeywords.push("мультфильм", "мультик", "аниме", "детский");
+        result.genreIds = result.genreIds.filter((id) => ![18, 24, 33].includes(id));
+        result.searchQueries = result.searchQueries.filter((query) => {
+            const normalized = normalizeText(query);
+            return !normalized.includes("мульт") && !normalized.includes("аниме");
+        });
+    } else if (!asksAnimation) {
+        result.deprioritizeAnimation = true;
+        result.genreIds = result.genreIds.filter((id) => ![18, 24, 33].includes(id));
+    }
 
     if (result.hardCountries.includes("россия") && (text.includes("сказ") || text.includes("волшеб"))) {
         result.searchQueries.unshift(
@@ -2342,8 +2468,8 @@ async function getGigaChatToken() {
         return gigachatToken;
     }
 
-    if (!GIGACHAT_AUTH_KEY) {
-        throw new Error("GIGACHAT_AUTH_KEY is not set");
+    if (!canUseGigaChat()) {
+        throw new Error("GigaChat temporarily unavailable");
     }
 
     const response = await axios.post(
@@ -2370,6 +2496,10 @@ async function getGigaChatToken() {
 }
 
 async function askGigaChat(content, maxTokens = 512, temperature = 0.2) {
+    if (!canUseGigaChat()) {
+        throw new Error("GigaChat temporarily unavailable");
+    }
+
     const token = await getGigaChatToken();
 
     const response = await axios.post(
@@ -2449,7 +2579,8 @@ async function buildRecommendationPlan(mood, savedPreferences = "") {
             searchQueries: searchQueries.length > 0 ? searchQueries : DEFAULT_PLAN.searchQueries
         }, mood);
     } catch (error) {
-        console.log("GIGACHAT PLAN FALLBACK:", error.message);
+        markGigaChatFallback(error);
+        console.log("GIGACHAT PLAN FALLBACK:", error.response?.status || error.message);
         return applyExplicitUserConstraints(DEFAULT_PLAN, mood);
     }
 }
@@ -2983,18 +3114,32 @@ async function fetchReferenceOptions(referenceMovie) {
     const films = await fetchFilmsByKeyword(referenceMovie.title);
     const targetYear = String(referenceMovie.year || "").trim();
     const normalizedTitle = normalizeText(referenceMovie.title);
+    const curated = curatedReferenceOptions(referenceMovie);
 
-    return films
+    return uniqueReferenceOptions([...curated, ...films])
         .filter((film) => film.filmId && film.nameRu)
         .sort((a, b) => {
             const aYear = targetYear && String(a.year) === targetYear ? 2 : 0;
             const bYear = targetYear && String(b.year) === targetYear ? 2 : 0;
             const aTitle = normalizeText(a.nameRu || a.nameEn || "").includes(normalizedTitle) ? 1 : 0;
             const bTitle = normalizeText(b.nameRu || b.nameEn || "").includes(normalizedTitle) ? 1 : 0;
+            const aCuratedFuture = Number(a.filmId) < 0 && String(a.year) === "2026" ? 3 : 0;
+            const bCuratedFuture = Number(b.filmId) < 0 && String(b.year) === "2026" ? 3 : 0;
 
-            return (bYear + bTitle + ratingValue(b) / 10) - (aYear + aTitle + ratingValue(a) / 10);
+            return (bYear + bTitle + bCuratedFuture + ratingValue(b) / 10)
+                - (aYear + aTitle + aCuratedFuture + ratingValue(a) / 10);
         })
         .slice(0, 5);
+}
+
+function curatedReferenceOptions(referenceMovie) {
+    const title = normalizeText(referenceMovie?.title);
+
+    if (title.includes("грозовой перевал") || title.includes("wuthering heights")) {
+        return LOCAL_FALLBACK_FILMS.filter((film) => Number(film.filmId) === -57);
+    }
+
+    return [];
 }
 
 async function fetchSimilarFilms(filmId) {
@@ -3114,10 +3259,15 @@ function fallbackRank(films, plan) {
                 && !hasAnyGenreId(film, [17, 1, 5, 12])
                 ? 18
                 : 0;
+            const animationPenalty = !isReferenceMode
+                && plan.deprioritizeAnimation
+                && hasAnyGenreId(film, [18, 24, 33])
+                ? 16
+                : 0;
 
             return {
                 film,
-                score: genreScore + referenceGenreScore + requiredGenreScore + topicScore + exactTopicScore + mediumScore + spaceScore + explicitSpaceScore + collectiveScore + favoriteGenreScore + ratingWeight + yearScore + ratingScore - avoidPenalty - excludedPenalty - lightMismatchPenalty
+                score: genreScore + referenceGenreScore + requiredGenreScore + topicScore + exactTopicScore + mediumScore + spaceScore + explicitSpaceScore + collectiveScore + favoriteGenreScore + ratingWeight + yearScore + ratingScore - avoidPenalty - excludedPenalty - lightMismatchPenalty - animationPenalty
             };
         })
         .sort((a, b) => b.score - a.score)
@@ -3322,7 +3472,8 @@ async function rankFilmsWithGigaChat(mood, plan, candidates) {
 
         return diversifyFilms([...selected, ...rest], MAX_RETURNED_FILMS);
     } catch (error) {
-        console.log("GIGACHAT RANK FALLBACK:", error.message);
+        markGigaChatFallback(error);
+        console.log("GIGACHAT RANK FALLBACK:", error.response?.status || error.message);
         return diversifyFilms(fallbackRank(candidates, plan), MAX_RETURNED_FILMS);
     }
 }
@@ -3356,7 +3507,10 @@ function memoryHistoryForUser(userId) {
 }
 
 function saveMemoryHistory(userId, query, source, films, plan) {
-    const history = memoryHistoryForUser(userId);
+    const queryKey = normalizeText(query);
+    const history = memoryHistoryForUser(userId)
+        .filter((item) => normalizeText(item.query) !== queryKey);
+
     history.unshift({
         id: Date.now(),
         query,
@@ -3374,17 +3528,17 @@ function mergeHistoryLists(primary, secondary) {
     const seen = new Set();
 
     return [...(primary || []), ...(secondary || [])]
+        .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
         .filter((item) => {
-            const key = `${item.query || ""}:${item.created_at || item.id || ""}`;
+            const key = normalizeText(item.query);
 
-            if (seen.has(key)) {
+            if (!key || seen.has(key)) {
                 return false;
             }
 
             seen.add(key);
             return true;
         })
-        .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
         .slice(0, 30);
 }
 
@@ -3612,6 +3766,20 @@ async function saveSearchHistoryInSupabase(userId, query, source, films, plan) {
     }
 
     try {
+        await axios.delete(
+            `${SUPABASE_URL}/rest/v1/user_search_history`,
+            {
+                params: {
+                    user_id: `eq.${userId}`,
+                    query: `eq.${query}`
+                },
+                headers: supabaseHeaders({
+                    "Prefer": "return=minimal"
+                }),
+                timeout: SUPABASE_TIMEOUT_MS
+            }
+        );
+
         await axios.post(
             `${SUPABASE_URL}/rest/v1/user_search_history`,
             [{
@@ -3717,11 +3885,106 @@ app.get("/health/providers", (req, res) => {
             supabase: Boolean(SUPABASE_URL && SUPABASE_KEY)
         },
         blocked: {
+            gigachat: Date.now() < gigachatBlockedUntil,
             kinopoisk: Date.now() < kinopoiskBlockedUntil,
             supabaseMovieCache: Date.now() < supabaseMovieCacheBlockedUntil,
             supabaseProfile: Date.now() < supabaseProfileBlockedUntil
         }
     });
+});
+
+app.post("/auth/signup", async (req, res) => {
+    const email = normalizeEmail(req.body?.email);
+    const password = String(req.body?.password || "");
+
+    if (!email || !email.includes("@") || password.length < 6) {
+        return res.status(400).json({
+            success: false,
+            message: "Введите корректную почту и пароль минимум из 6 символов"
+        });
+    }
+
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+        return res.status(503).json({
+            success: false,
+            message: "На сервере не настроен Supabase"
+        });
+    }
+
+    try {
+        const response = await supabaseAuthRequest({
+            method: "post",
+            url: `${SUPABASE_URL}/auth/v1/admin/users`,
+            data: {
+                email,
+                password,
+                email_confirm: true,
+                user_metadata: {
+                    source: "cinemood"
+                }
+            }
+        });
+
+        const user = response.data || {};
+
+        return res.json({
+            success: true,
+            message: "Аккаунт создан, вход выполнен",
+            userId: user.id,
+            email: user.email || email
+        });
+    } catch (error) {
+        console.log("SUPABASE AUTH SIGNUP FALLBACK:", error.response?.status || error.message);
+        return res.status(error.response?.status || 500).json({
+            success: false,
+            message: publicAuthErrorMessage(error)
+        });
+    }
+});
+
+app.post("/auth/signin", async (req, res) => {
+    const email = normalizeEmail(req.body?.email);
+    const password = String(req.body?.password || "");
+
+    if (!email || !email.includes("@") || password.length < 6) {
+        return res.status(400).json({
+            success: false,
+            message: "Введите корректную почту и пароль"
+        });
+    }
+
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+        return res.status(503).json({
+            success: false,
+            message: "На сервере не настроен Supabase"
+        });
+    }
+
+    try {
+        const response = await supabaseAuthRequest({
+            method: "post",
+            url: `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
+            data: {
+                email,
+                password
+            }
+        });
+
+        const user = response.data?.user || {};
+
+        return res.json({
+            success: Boolean(user.id),
+            message: user.id ? "Вход выполнен" : "Не удалось войти",
+            userId: user.id,
+            email: user.email || email
+        });
+    } catch (error) {
+        console.log("SUPABASE AUTH SIGNIN FALLBACK:", error.response?.status || error.message);
+        return res.status(error.response?.status || 500).json({
+            success: false,
+            message: publicAuthErrorMessage(error)
+        });
+    }
 });
 
 app.get("/favorites", async (req, res) => {
@@ -3801,6 +4064,40 @@ app.delete("/profile/history/:id", async (req, res) => {
     res.json({
         userId,
         history
+    });
+});
+
+app.delete("/profile/session-data", async (req, res) => {
+    const userId = normalizeUserId(req.query.userId || req.body?.userId);
+    memoryFavorites.delete(userId);
+    memoryHistory.delete(userId);
+
+    if (canUseSupabase()) {
+        await Promise.allSettled([
+            axios.delete(
+                `${SUPABASE_URL}/rest/v1/favorite_movies`,
+                {
+                    params: { user_id: `eq.${userId}` },
+                    headers: supabaseHeaders({ "Prefer": "return=minimal" }),
+                    timeout: SUPABASE_TIMEOUT_MS
+                }
+            ),
+            axios.delete(
+                `${SUPABASE_URL}/rest/v1/user_search_history`,
+                {
+                    params: { user_id: `eq.${userId}` },
+                    headers: supabaseHeaders({ "Prefer": "return=minimal" }),
+                    timeout: SUPABASE_TIMEOUT_MS
+                }
+            )
+        ]);
+    }
+
+    res.json({
+        userId,
+        favorites: [],
+        history: [],
+        preferences: await fetchPreferencesFromSupabase(userId)
     });
 });
 
@@ -3952,8 +4249,10 @@ app.post("/recommendations", async (req, res) => {
         }
 
         if (plan.referenceMovie) {
-            const reference = requestedReferenceMovieId
-                ? await fetchFilmDetails(requestedReferenceMovieId) || { filmId: requestedReferenceMovieId, nameRu: plan.referenceMovie.title, genres: [] }
+        const reference = requestedReferenceMovieId
+                ? LOCAL_FALLBACK_FILMS.find((film) => Number(film.filmId) === Number(requestedReferenceMovieId))
+                    || await fetchFilmDetails(requestedReferenceMovieId)
+                    || { filmId: requestedReferenceMovieId, nameRu: plan.referenceMovie.title, genres: [] }
                 : await fetchReferenceMovie(plan.referenceMovie);
 
             if (reference) {
