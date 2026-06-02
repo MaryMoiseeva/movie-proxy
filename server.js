@@ -641,6 +641,42 @@ function uniqueReferenceOptions(films) {
     });
 }
 
+function normalizeReferenceTitle(value) {
+    return normalizeText(value)
+        .replace(/[^\p{L}\p{N}]+/gu, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function referenceTitleScore(film, requestedTitle) {
+    const wanted = normalizeReferenceTitle(requestedTitle);
+
+    if (!wanted) {
+        return 0;
+    }
+
+    const titles = [
+        film.nameRu,
+        film.nameEn
+    ]
+        .map(normalizeReferenceTitle)
+        .filter(Boolean);
+
+    let best = 0;
+
+    for (const title of titles) {
+        if (title === wanted) {
+            best = Math.max(best, 4);
+        } else if (title.startsWith(`${wanted} `)) {
+            best = Math.max(best, 3);
+        } else if (title.includes(` ${wanted} `)) {
+            best = Math.max(best, 1);
+        }
+    }
+
+    return best;
+}
+
 function markKinopoiskBlocked(error, source = "") {
     const status = error.response?.status;
     const isPersonLookup = String(source).startsWith("PERSON ");
@@ -1837,7 +1873,7 @@ function extractYearAndRatingConstraints(mood) {
 
 function extractReferenceMovieFromText(mood) {
     const text = String(mood || "").trim();
-    const match = text.match(/(?:\u043f\u043e\u0445\u043e\u0436\w*\s+\u043d\u0430|\u043a\u0430\u043a|\u0432 \u0441\u0442\u0438\u043b\u0435)\s+(.+?)(?:\s+((?:19|20)\d{2})(?:\s*(?:\u0433\u043e\u0434|\u0433\u043e\u0434\u0430|\u0433\.))?)?$/i);
+    const match = text.match(/(?:\u043f\u043e\u0445\u043e\u0436[\p{L}\p{N}_-]*\s+\u043d\u0430|\u043a\u0430\u043a|\u0432 \u0441\u0442\u0438\u043b\u0435)\s+(.+?)(?:\s+((?:19|20)\d{2})(?:\s*(?:\u0433\u043e\u0434|\u0433\u043e\u0434\u0430|\u0433\.))?)?$/iu);
 
     if (!match) {
         return null;
@@ -1860,7 +1896,7 @@ function extractReferenceMovieFromText(mood) {
 }
 
 function hasExplicitReferenceRequest(mood) {
-    return /(?:\u043f\u043e\u0445\u043e\u0436\w*\s+\u043d\u0430|\u043a\u0430\u043a|\u0432 \u0441\u0442\u0438\u043b\u0435)\s+.+/i
+    return /(?:\u043f\u043e\u0445\u043e\u0436[\p{L}\p{N}_-]*\s+\u043d\u0430|\u043a\u0430\u043a|\u0432 \u0441\u0442\u0438\u043b\u0435)\s+.+/iu
         .test(String(mood || ""));
 }
 
@@ -3169,19 +3205,25 @@ async function fetchReferenceOptions(referenceMovie) {
     const targetYear = String(referenceMovie.year || "").trim();
     const normalizedTitle = normalizeText(referenceMovie.title);
     const curated = curatedReferenceOptions(referenceMovie);
+    const uniqueOptions = uniqueReferenceOptions([...curated, ...films])
+        .filter((film) => film.filmId && film.nameRu);
+    const strictTitleOptions = uniqueOptions
+        .filter((film) => referenceTitleScore(film, referenceMovie.title) >= 3);
+    const options = strictTitleOptions.length > 0 ? strictTitleOptions : uniqueOptions;
 
-    return uniqueReferenceOptions([...curated, ...films])
-        .filter((film) => film.filmId && film.nameRu)
+    return options
         .sort((a, b) => {
             const aYear = targetYear && String(a.year) === targetYear ? 2 : 0;
             const bYear = targetYear && String(b.year) === targetYear ? 2 : 0;
             const aTitle = normalizeText(a.nameRu || a.nameEn || "").includes(normalizedTitle) ? 1 : 0;
             const bTitle = normalizeText(b.nameRu || b.nameEn || "").includes(normalizedTitle) ? 1 : 0;
+            const aReferenceTitle = referenceTitleScore(a, referenceMovie.title);
+            const bReferenceTitle = referenceTitleScore(b, referenceMovie.title);
             const aCuratedFuture = Number(a.filmId) < 0 && String(a.year) === "2026" ? 3 : 0;
             const bCuratedFuture = Number(b.filmId) < 0 && String(b.year) === "2026" ? 3 : 0;
 
-            return (bYear + bTitle + bCuratedFuture + ratingValue(b) / 10)
-                - (aYear + aTitle + aCuratedFuture + ratingValue(a) / 10);
+            return (bReferenceTitle + bYear + bTitle + bCuratedFuture + ratingValue(b) / 10)
+                - (aReferenceTitle + aYear + aTitle + aCuratedFuture + ratingValue(a) / 10);
         })
         .slice(0, 5);
 }
