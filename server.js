@@ -1916,19 +1916,50 @@ function looksLikeBareMovieTitle(mood) {
         return false;
     }
 
+    if (/(?:^|\s)(?:мне|меня|мы|нам|сестра|брат|подруга|друг|мама|папа|парень|девушка)(?:\s|$)/u.test(text)) {
+        return false;
+    }
+
     return ![
         "\u0445\u043e\u0447\u0443",
         "\u0447\u0442\u043e-\u0442\u043e",
         "\u0447\u0442\u043e \u0442\u043e",
+        "какой-нибудь",
+        "какие-нибудь",
+        "посоветуй",
+        "подбери",
+        "найди",
+        "нужно",
+        "надо",
         "\u043f\u0440\u043e ",
         "\u0434\u043b\u044f ",
         "\u043d\u0430\u0441\u0442\u0440\u043e\u0435\u043d",
+        "легк",
+        "лёгк",
+        "весенн",
+        "осенн",
+        "летн",
+        "зимн",
+        "уют",
+        "мил",
+        "доб",
+        "тепл",
+        "тёпл",
         "\u0433\u0440\u0443\u0441\u0442",
+        "страш",
+        "романтич",
+        "смешн",
+        "интерес",
+        "новинк",
+        "популяр",
         "\u0432\u0435\u0441\u0435\u043b",
         "\u043f\u043e\u0441\u043c\u043e\u0442\u0440",
         "\u0444\u0438\u043b\u044c\u043c",
         "\u043a\u0438\u043d\u043e",
         "\u0442\u043e\u043b\u044c\u043a\u043e",
+        "выше",
+        "ниже",
+        "рейтинг",
         "\u0433\u043e\u0434",
         "\u0433\u043e\u0434\u0430",
         "\u0432\u044b\u043f\u0443\u0441\u043a"
@@ -3209,6 +3240,11 @@ async function fetchReferenceOptions(referenceMovie) {
         .filter((film) => film.filmId && film.nameRu);
     const strictTitleOptions = uniqueOptions
         .filter((film) => referenceTitleScore(film, referenceMovie.title) >= 3);
+
+    if (referenceMovie.bareTitle && strictTitleOptions.length === 0) {
+        return [];
+    }
+
     const options = strictTitleOptions.length > 0 ? strictTitleOptions : uniqueOptions;
 
     return options
@@ -4498,7 +4534,9 @@ app.post("/recommendations", async (req, res) => {
         if (plan.referenceMovie && !requestedReferenceMovieId) {
             const options = await fetchReferenceOptions(plan.referenceMovie);
 
-            if (options.length > 1) {
+            if (plan.referenceMovie.bareTitle && options.length === 0) {
+                plan.referenceMovie = null;
+            } else if (options.length > 1) {
                 const exactYearOptions = plan.referenceMovie.year
                     ? options.filter((film) => String(film.year) === String(plan.referenceMovie.year))
                     : [];
