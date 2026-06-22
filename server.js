@@ -74,6 +74,7 @@ const KINOPOISK_MIN_START_INTERVAL_MS = 250;
 const KINOPOISK_MAX_CONCURRENT = 2;
 const KINOPOISK_MEMORY_TTL_MS = 5 * 60 * 1000;
 const SUPABASE_TIMEOUT_MS = 5000;
+const SUPABASE_AUTH_TIMEOUT_MS = Number(process.env.SUPABASE_AUTH_TIMEOUT_MS || 20000);
 const APK_CANDIDATE_PATHS = [
     process.env.CINEMOOD_APK_PATH,
     path.join(__dirname, "public", "cinemood.apk"),
@@ -270,6 +271,17 @@ const LOCAL_FALLBACK_FILMS = [
 ];
 
 const ACTOR_FALLBACK_FILMOGRAPHIES = [
+    {
+        aliases: ["юрий никулин", "никулин", "yuri nikulin"],
+        name: "Юрий Никулин",
+        films: [
+            localActorFilm("Бриллиантовая рука", 1968, ["комедия", "приключения", "криминал"], "8.5"),
+            localActorFilm("Кавказская пленница, или Новые приключения Шурика", 1966, ["комедия", "приключения", "мелодрама"], "8.5"),
+            localActorFilm("Операция «Ы» и другие приключения Шурика", 1965, ["комедия"], "8.7"),
+            localActorFilm("Старики-разбойники", 1971, ["комедия"], "7.8"),
+            localActorFilm("Они сражались за Родину", 1975, ["драма", "военный"], "8.4")
+        ]
+    },
     {
         aliases: ["\u0442\u043e\u043c \u0445\u044d\u043d\u043a\u0441", "\u0442\u043e\u043c \u0445\u0435\u043d\u043a\u0441", "tom hanks"],
         name: "\u0422\u043e\u043c \u0425\u044d\u043d\u043a\u0441",
@@ -747,7 +759,7 @@ function supabaseAuthHeaders(extra = {}, forceAuthorization = false) {
 async function supabaseAuthRequest(config) {
     const requestConfig = {
         ...config,
-        timeout: SUPABASE_TIMEOUT_MS,
+        timeout: SUPABASE_AUTH_TIMEOUT_MS,
         headers: supabaseAuthHeaders(config.headers || {})
     };
 
@@ -1811,6 +1823,11 @@ function extractCountryConstraints(mood) {
         searchQueries.push("французский фильм", "французское кино");
     }
 
+    if (/(?:испанск|испания|из испании|снято в испании)/.test(text)) {
+        countries.push("испания");
+        searchQueries.push("испанский фильм", "испанское кино", "кино испании");
+    }
+
     return {
         hardCountries: [...new Set(countries)],
         searchQueries
@@ -2155,6 +2172,18 @@ function applyTopicSignals(result, mood) {
                 "\u043c\u043e\u0440\u0441\u043a\u043e\u0435 \u0444\u044d\u043d\u0442\u0435\u0437\u0438 \u043f\u0438\u0440\u0430\u0442\u044b"
             ],
             requiredKeywords: ["\u043f\u0438\u0440\u0430\u0442", "\u043a\u043e\u0440\u0441\u0430\u0440"]
+        },
+        {
+            keywords: ["принцесс", "королев", "замок", "дворец"],
+            genreIds: [18, 12, 19, 7],
+            queries: [
+                "мультфильм про принцессу",
+                "мультики про принцесс",
+                "сказка про принцессу",
+                "дисней принцессы",
+                "волшебный мультфильм принцесса"
+            ],
+            requiredKeywords: ["принцесс", "королев", "замок", "дворец"]
         },
         {
             keywords: ["\u0441\u043a\u0430\u0437", "\u0432\u043e\u043b\u0448\u0435\u0431", "\u043c\u0430\u0433\u0438", "\u043c\u0430\u0433\u0438\u0447", "\u0447\u0443\u0434\u0435\u0441", "\u043f\u0440\u0438\u043d\u0446\u0435\u0441\u0441", "\u043a\u043e\u043b\u0434\u0443\u043d", "\u0432\u0435\u0434\u044c\u043c"],
